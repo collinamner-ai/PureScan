@@ -525,8 +525,27 @@
 
     #document-screen main { padding-bottom: 100px; display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; }
 
-    #folder-screen { display: none; }
-    #folder-screen.active { display: flex; }
+    #image-preview-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.95);
+      z-index: 700;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+    #image-preview-modal.active { display: flex; }
+    #preview-img { max-width: 90%; max-height: 80vh; object-fit: contain; }
+    .preview-header { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 16px; background: rgba(0,0,0,0.8); }
+    .preview-header h1 { color: white; margin: 0; font-size: 18px; }
+    .preview-close { background: none; border: none; color: white; font-size: 28px; cursor: pointer; padding: 0; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+    .preview-nav { position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: center; gap: 12px; padding: 16px; background: rgba(0,0,0,0.8); }
+    .preview-nav button { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .preview-nav button:hover { background: var(--primary); border-color: var(--primary); }
   </style>
 </head>
 <body>
@@ -724,6 +743,18 @@
       </div>
     </section>
 
+    <div id="image-preview-modal">
+      <div class="preview-header">
+        <h1 id="preview-filename"></h1>
+        <button class="preview-close" id="preview-modal-close">✕</button>
+      </div>
+      <img id="preview-img" alt="preview">
+      <div class="preview-nav">
+        <button id="preview-prev">← Previous</button>
+        <button id="preview-next-img">Next →</button>
+      </div>
+    </div>
+
     <section id="document-screen" class="screen">
       <header>
         <button class="header-btn" id="document-back"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
@@ -749,7 +780,7 @@
 
   <script>
 const STORAGE="paperclear_v5",ONBOARD_PREF="paperclear_onboard_dontshow",DEFAULT_FOLDER_PREF="paperclear_default_folder",REMEMBER_FOLDER_PREF="paperclear_remember_folder";
-let state={folders:[],docs:{},pages:[],capture:null,pageIdx:0,selectedFolder:null,sortBy:"recent",docNow:null,currentFolder:null},camera=null,isFirstLaunchGuide=true,contextTarget=null,moveTarget=null,isCropping=false,cropData=null;
+let state={folders:[],docs:{},pages:[],capture:null,pageIdx:0,selectedFolder:null,sortBy:"recent",docNow:null,currentFolder:null,previewDocId:null,previewPageIdx:0},camera=null,isFirstLaunchGuide=true,contextTarget=null,moveTarget=null,isCropping=false,cropData=null;
 
 const load=()=>{const data=localStorage.getItem(STORAGE);if(data)state=JSON.parse(data);if(!state.folders?.length)state.folders=[{id:"tax",name:"Tax",created:Date.now()},{id:"medical",name:"Medical",created:Date.now()},{id:"receipts",name:"Receipts",created:Date.now()},{id:"legal",name:"Legal",created:Date.now()},{id:"other",name:"Other",created:Date.now()}];if(!state.docs)state.docs={};};
 const save=()=>localStorage.setItem(STORAGE,JSON.stringify(state));
@@ -760,8 +791,9 @@ const openFolderPicker=()=>{renderFolderPickerList();document.getElementById("fo
 const closeFolderPicker=()=>document.getElementById("folder-picker").classList.remove("active");
 const renderFolderPickerList=()=>{const list=document.getElementById("folder-picker-list");list.innerHTML="";state.folders.forEach(f=>{const div=document.createElement("div");div.className="modal-folder-item"+(state.selectedFolder===f.id?" selected":"");div.innerHTML=`<svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>${f.name}</span>`;div.onclick=()=>{state.selectedFolder=f.id;renderFolderPickerList();};list.appendChild(div);});};
 const renderFolders=()=>{const grid=document.getElementById("folders");grid.innerHTML="";const sorted=[...state.folders].sort((a,b)=>state.sortBy==="name"?a.name.localeCompare(b.name):b.created-a.created);sorted.forEach(f=>{const count=Object.values(state.docs).filter(d=>d.folder===f.id).length;const div=document.createElement("div");div.className="folder";div.innerHTML=`<div class="folder-icon"><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div><div class="folder-name">${f.name}</div><div class="folder-count">${count}</div>`;div.onclick=()=>openFolder(f.id);grid.appendChild(div);});};
+const refreshFolderCount=()=>{renderFolders();};
 const openFolder=(id)=>{const folder=state.folders.find(f=>f.id===id);if(!folder)return;state.currentFolder=id;document.getElementById("folder-title").textContent=folder.name;renderDocs(id);show("folder-screen");};
-const renderDocs=(id)=>{const docs=Object.values(state.docs).filter(d=>d.folder===id).sort((a,b)=>b.created-a.created);const list=document.getElementById("folder-docs");list.innerHTML="";docs.forEach(d=>{const card=document.createElement("div");card.className="doc-card";card.innerHTML=`<div class="doc-thumb">${d.pages?.[0]?`<img src="${d.pages[0]}"/>`:""}</div><div class="doc-info"><div class="doc-name">${d.name}</div><div class="doc-meta">${d.pages?.length||0} page${d.pages?.length!==1?"s":""}</div></div>`;card.onclick=()=>openDoc(d.id);card.oncontextmenu=(e)=>{e.preventDefault();showContextMenu(e,d.id);};card.ontouchstart=()=>{card.touchStartTime=Date.now();};card.ontouchend=()=>{if(Date.now()-card.touchStartTime>500){showContextMenu(event,d.id);}};list.appendChild(card);});};
+const renderDocs=(id)=>{const docs=Object.values(state.docs).filter(d=>d.folder===id).sort((a,b)=>b.created-a.created);const list=document.getElementById("folder-docs");list.innerHTML="";docs.forEach(d=>{const card=document.createElement("div");card.className="doc-card";card.innerHTML=`<div class="doc-thumb">${d.pages?.[0]?`<img src="${d.pages[0]}"/>`:""}</div><div class="doc-info"><div class="doc-name">${d.name}</div><div class="doc-meta">${d.pages?.length||0} page${d.pages?.length!==1?"s":""}</div></div>`;const thumbnail=card.querySelector(".doc-thumb");thumbnail.onclick=(e)=>{e.stopPropagation();openImagePreview(d.id,0);};card.onclick=()=>openDoc(d.id);card.oncontextmenu=(e)=>{e.preventDefault();showContextMenu(e,d.id);};card.ontouchstart=()=>{card.touchStartTime=Date.now();};card.ontouchend=()=>{if(Date.now()-card.touchStartTime>500){showContextMenu(event,d.id);}};list.appendChild(card);});};
 const openDoc=(id)=>{const d=state.docs[id];if(!d)return;state.docNow=id;document.getElementById("document-title").textContent=d.name;const grid=document.getElementById("pages");grid.innerHTML="";(d.pages||[]).forEach(p=>{const thumb=document.createElement("div");thumb.style.cssText="aspect-ratio:3/4;border-radius:8px;border:1px solid #e4e8ec;overflow:hidden;background:#f8f9fb;";thumb.innerHTML=`<img src="${p}" style="width:100%;height:100%;object-fit:cover;"/>`;grid.appendChild(thumb);});show("document-screen");};
 const showContextMenu=(e,docId)=>{contextTarget=docId;const menu=document.getElementById("context-menu");menu.classList.add("active");menu.style.top=(e.clientY||e.touches?.[0].clientY)+"px";menu.style.left=(e.clientX||e.touches?.[0].clientX)+"px";};
 const hideContextMenu=()=>{document.getElementById("context-menu").classList.remove("active");contextTarget=null;};
@@ -774,15 +806,18 @@ const initCrop=()=>{const img=new Image();img.onload=()=>{const canvas=document.
 const setupCropHandles=()=>{const box=document.getElementById("crop-box");let dragging=null;box.addEventListener("mousedown",(e)=>{if(e.target.classList.contains("crop-handle")){dragging=e.target.className.split(" ")[1];}else{dragging="move";}});document.addEventListener("mousemove",(e)=>{if(!dragging||!cropData)return;const box=document.getElementById("crop-box");const rect=box.parentElement.getBoundingClientRect();const x=e.clientX-rect.left;const y=e.clientY-rect.top;if(dragging==="move"){box.style.left=(x-cropData.w/2)+"px";box.style.top=(y-cropData.h/2)+"px";}else if(dragging==="nw"){box.style.left=x+"px";box.style.top=y+"px";box.style.width=(cropData.w-(x-parseFloat(box.style.left)))+"px";box.style.height=(cropData.h-(y-parseFloat(box.style.top)))+"px";}else if(dragging==="se"){box.style.width=(x-parseFloat(box.style.left))+"px";box.style.height=(y-parseFloat(box.style.top))+"px";}});document.addEventListener("mouseup",()=>{dragging=null;});};
 const applyFilterBtn=(type)=>{if(!state.capture)return;applyFilter(type);activateFilterBtn(type);};
 const renderReview=()=>{const container=document.getElementById("review-thumbs");container.innerHTML="";(state.pages||[]).forEach((p,i)=>{const th=document.createElement("div");th.className="review-thumb"+(i===state.pageIdx?" active":"");th.innerHTML=`<img src="${p}"/><div class="review-counter">${i+1}/${state.pages.length}</div>`;th.onclick=()=>{state.pageIdx=i;renderReview();document.getElementById("review-image").src=state.pages[i];};container.appendChild(th);});document.getElementById("review-image").src=state.pages[state.pageIdx];document.getElementById("review-title").textContent=`Review (${state.pageIdx+1}/${state.pages.length})`;};
-const saveDoc=()=>{if(!state.pages?.length||!state.selectedFolder){alert("Please select a folder");return;}const folder=state.selectedFolder,now=Date.now(),date=new Date(now).toISOString().slice(0,10),name=prompt("Document name:",`Scan - ${date}`)||`Scan - ${date}`,id="doc_"+now;state.docs[id]={id,name,folder,pages:[...state.pages],created:now};if(document.getElementById("folder-remember").checked){localStorage.setItem(DEFAULT_FOLDER_PREF,folder);localStorage.setItem(REMEMBER_FOLDER_PREF,"1");}state.pages=[];state.pageIdx=0;state.capture=null;save();show("home-screen");};
+const saveDoc=()=>{if(!state.pages?.length||!state.selectedFolder){alert("Please select a folder");return;}const folder=state.selectedFolder,now=Date.now(),date=new Date(now).toISOString().slice(0,10),name=prompt("Document name:",`Scan - ${date}`)||`Scan - ${date}`,id="doc_"+now;state.docs[id]={id,name,folder,pages:[...state.pages],created:now};if(document.getElementById("folder-remember").checked){localStorage.setItem(DEFAULT_FOLDER_PREF,folder);localStorage.setItem(REMEMBER_FOLDER_PREF,"1");}state.pages=[];state.pageIdx=0;state.capture=null;save();refreshFolderCount();show("home-screen");};
 const exportPDF=async(docId)=>{const d=state.docs[docId];if(!d)return;try{const {jsPDF}=window.jspdf,pdf=new jsPDF({unit:"pt",format:"a4"});(d.pages||[]).forEach((p,i)=>{if(i)pdf.addPage();const w=pdf.internal.pageSize.getWidth(),h=pdf.internal.pageSize.getHeight();pdf.addImage(p,"JPEG",0,0,w,h);});pdf.save(d.name+".pdf");}catch(e){alert("Failed: "+(e?.message||e));}};
 
-// Context menu actions
+const openImagePreview=(docId,pageIdx)=>{const d=state.docs[docId];if(!d||!d.pages)return;state.previewDocId=docId;state.previewPageIdx=pageIdx;updateImagePreview();document.getElementById("image-preview-modal").classList.add("active");};
+
+const updateImagePreview=()=>{const d=state.docs[state.previewDocId];if(!d)return;document.getElementById("preview-img").src=d.pages[state.previewPageIdx];document.getElementById("preview-filename").textContent=`${d.name} - Page ${state.previewPageIdx+1}/${d.pages.length}`;};
+
 document.getElementById("ctx-edit").onclick=()=>{if(!contextTarget)return;const d=state.docs[contextTarget];const newName=prompt("Rename document:",d.name);if(newName?.trim()){d.name=newName;save();renderDocs(state.currentFolder);}hideContextMenu();};
 document.getElementById("ctx-move").onclick=()=>{if(!contextTarget)return;moveTarget=contextTarget;const list=document.getElementById("move-folder-list");list.innerHTML="";state.folders.forEach(f=>{const div=document.createElement("div");div.className="modal-folder-item";div.innerHTML=`<svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>${f.name}</span>`;div.onclick=()=>{state.docs[moveTarget].folder=f.id;};list.appendChild(div);});document.getElementById("move-modal").classList.add("active");};
 document.getElementById("ctx-export").onclick=()=>{if(!contextTarget)return;exportPDF(contextTarget);hideContextMenu();};
-document.getElementById("ctx-delete").onclick=()=>{if(!contextTarget)return;if(confirm("Delete this document?")){delete state.docs[contextTarget];save();renderDocs(state.currentFolder);}hideContextMenu();};
-document.getElementById("move-modal-ok").onclick=()=>{save();renderDocs(state.currentFolder);document.getElementById("move-modal").classList.remove("active");};
+document.getElementById("ctx-delete").onclick=()=>{if(!contextTarget)return;if(confirm("Delete this document?")){delete state.docs[contextTarget];save();renderDocs(state.currentFolder);refreshFolderCount();}hideContextMenu();};
+document.getElementById("move-modal-ok").onclick=()=>{save();renderDocs(state.currentFolder);refreshFolderCount();document.getElementById("move-modal").classList.remove("active");};
 document.getElementById("move-modal-close").onclick=()=>document.getElementById("move-modal").classList.remove("active");
 document.getElementById("move-modal-cancel").onclick=()=>document.getElementById("move-modal").classList.remove("active");
 
@@ -816,6 +851,9 @@ document.getElementById("settings-back").onclick=()=>show("home-screen");
 document.getElementById("folder-back").onclick=()=>show("home-screen");
 document.getElementById("folder-scan").onclick=()=>{state.pages=[];state.pageIdx=0;state.capture=null;show("camera-screen");startCamera();};
 document.getElementById("document-back").onclick=()=>show("folder-screen");
+document.getElementById("preview-modal-close").onclick=()=>{document.getElementById("image-preview-modal").classList.remove("active");};
+document.getElementById("preview-prev").onclick=()=>{if(state.previewPageIdx>0){state.previewPageIdx--;updateImagePreview();}};
+document.getElementById("preview-next-img").onclick=()=>{const d=state.docs[state.previewDocId];if(state.previewPageIdx<d.pages.length-1){state.previewPageIdx++;updateImagePreview();}};
 document.querySelectorAll(".sort-btn").forEach(b=>{b.onclick=()=>{document.querySelectorAll(".sort-btn").forEach(x=>x.classList.remove("active"));b.classList.add("active");state.sortBy=b.getAttribute("data-sort");renderFolders();};});
 document.addEventListener("click",hideContextMenu);
 
