@@ -370,9 +370,9 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    #filter-screen main { padding: 0; background: #000; display: flex; flex-direction: column; }
-    #filter-image { flex: 1; width: 100%; object-fit: contain; background: #000; }
-    .filter-toolbar { background: rgba(0,0,0,0.8); padding: 12px 16px; display: flex; gap: 8px; overflow-x: auto; }
+    #filter-screen main { padding: 0; background: #000; display: flex; flex-direction: column; position: relative; }
+    #filter-image { flex: 1; width: 100%; object-fit: contain; background: #000; cursor: crosshair; }
+    .filter-toolbar { background: rgba(0,0,0,0.8); padding: 12px 16px; display: flex; gap: 8px; overflow-x: auto; flex-wrap: wrap; }
     .filter-btn {
       background: rgba(255,255,255,0.1);
       border: 1px solid rgba(255,255,255,0.2);
@@ -383,9 +383,30 @@
       font-size: 12px;
       white-space: nowrap;
       flex-shrink: 0;
+      text-align: center;
     }
     .filter-btn:active { background: var(--primary); }
     .filter-btn.active { background: var(--primary); border-color: var(--primary); }
+
+    /* Crop Mode */
+    #crop-container {
+      display: none;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 100;
+    }
+    #crop-container.active { display: flex; align-items: center; justify-content: center; }
+    #crop-canvas { max-width: 100%; max-height: 100%; }
+    .crop-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: -1; }
+    .crop-box { position: absolute; border: 2px dashed white; box-shadow: inset 0 0 0 9999px rgba(0,0,0,0.5); cursor: move; }
+    .crop-handle { position: absolute; width: 12px; height: 12px; background: white; border: 2px solid var(--primary); border-radius: 50%; }
+    .crop-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
+    .crop-handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+    .crop-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+    .crop-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
 
     /* Crop Overlay */
     #crop-overlay {
@@ -648,16 +669,25 @@
       </header>
       <main>
         <img id="filter-image" alt="preview">
+        <div id="crop-container">
+          <canvas id="crop-canvas"></canvas>
+          <div class="crop-box" id="crop-box">
+            <div class="crop-handle nw"></div>
+            <div class="crop-handle ne"></div>
+            <div class="crop-handle sw"></div>
+            <div class="crop-handle se"></div>
+          </div>
+        </div>
         <div class="filter-toolbar">
           <button class="filter-btn btn-primary active" data-filter="clean">Clean</button>
           <button class="filter-btn" data-filter="bw">B&W</button>
-          <button class="filter-btn" data-filter="contrast">Sharp</button>
+          <button class="filter-btn" data-filter="contrast">Sharpen</button>
           <button class="filter-btn" id="crop-btn">✂️ Crop</button>
+          <button class="filter-btn btn-primary" id="confirm-crop" style="display: none;">✓ Confirm</button>
         </div>
       </main>
       <div class="footer full">
-        <button class="btn" id="filter-back-btn">Back</button>
-        <button class="btn btn-primary" id="filter-review">Save & Next</button>
+        <button class="btn btn-primary" id="filter-review">Next</button>
       </div>
     </section>
 
@@ -739,8 +769,11 @@ const hideContextMenu=()=>{document.getElementById("context-menu").classList.rem
 const startCamera=async()=>{try{document.getElementById("camera-loading").style.display="block";camera=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});document.getElementById("camera-feed").srcObject=camera;document.getElementById("camera-loading").style.display="none";}catch(e){document.getElementById("camera-loading").style.display="none";alert("Camera error: "+(e?.name||"Unknown"));show("home-screen");}};
 const stopCamera=()=>{if(camera){camera.getTracks().forEach(t=>t.stop());camera=null;}};
 const capture=()=>{const video=document.getElementById("camera-feed"),canvas=document.getElementById("preview-canvas");canvas.width=video.videoWidth;canvas.height=video.videoHeight;canvas.getContext("2d").drawImage(video,0,0);state.capture=canvas.toDataURL("image/jpeg",0.85);};
-const applyFilter=(type)=>{if(!state.capture)return;const img=new Image();img.onload=()=>{const c=document.createElement("canvas");c.width=img.width;c.height=img.height;const ctx=c.getContext("2d");ctx.drawImage(img,0,0);if(type!=="clean"){const pixels=ctx.getImageData(0,0,c.width,c.height),data=pixels.data;for(let i=0;i<data.length;i+=4){const gray=(data[i]+data[i+1]+data[i+2])/3;let v=gray;if(type==="contrast")v=Math.max(0,Math.min(255,(gray-128)*1.5+128));data[i]=data[i+1]=data[i+2]=v;}ctx.putImageData(pixels,0,0);}state.capture=c.toDataURL("image/jpeg",0.85);document.getElementById("filter-image").src=state.capture;};img.src=state.capture;};
-const activateFilterBtn=(type)=>{document.querySelectorAll(".filter-btn").forEach(b=>b.classList.remove("active"));document.querySelector(`.filter-btn[data-filter="${type}"]`)?.classList.add("active");};
+const applyFilter=(type)=>{if(!state.capture)return;const img=new Image();img.onload=()=>{const c=document.createElement("canvas");c.width=img.width;c.height=img.height;const ctx=c.getContext("2d");ctx.drawImage(img,0,0);if(type==="clean"){/* Keep original */}else if(type==="bw"){const pixels=ctx.getImageData(0,0,c.width,c.height),data=pixels.data;for(let i=0;i<data.length;i+=4){const gray=(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114);const threshold=128;const bw=gray>threshold?255:0;data[i]=data[i+1]=data[i+2]=bw;}ctx.putImageData(pixels,0,0);}else if(type==="contrast"){const pixels=ctx.getImageData(0,0,c.width,c.height),data=pixels.data;for(let i=0;i<data.length;i+=4){const gray=(data[i]+data[i+1]+data[i+2])/3;const sharpen=Math.max(0,Math.min(255,gray<128?(gray*0.7):(128+(gray-128)*1.8)));data[i]=data[i+1]=data[i+2]=sharpen;}ctx.putImageData(pixels,0,0);}state.capture=c.toDataURL("image/jpeg",0.85);document.getElementById("filter-image").src=state.capture;};img.src=state.capture;};
+const activateFilterBtn=(type)=>{document.querySelectorAll(".filter-btn[data-filter]").forEach(b=>b.classList.remove("active"));document.querySelector(`.filter-btn[data-filter="${type}"]`)?.classList.add("active");};
+const initCrop=()=>{const img=new Image();img.onload=()=>{const canvas=document.getElementById("crop-canvas");canvas.width=img.width;canvas.height=img.height;const ctx=canvas.getContext("2d");ctx.drawImage(img,0,0);const box=document.getElementById("crop-box");const w=canvas.width*0.8;const h=canvas.height*0.8;const x=(canvas.width-w)/2;const y=(canvas.height-h)/2;box.style.left=x+"px";box.style.top=y+"px";box.style.width=w+"px";box.style.height=h+"px";cropData={x,y,w,h,imgW:img.width,imgH:img.height};setupCropHandles();};img.src=state.capture;};
+const setupCropHandles=()=>{const box=document.getElementById("crop-box");let dragging=null;box.addEventListener("mousedown",(e)=>{if(e.target.classList.contains("crop-handle")){dragging=e.target.className.split(" ")[1];}else{dragging="move";}});document.addEventListener("mousemove",(e)=>{if(!dragging||!cropData)return;const box=document.getElementById("crop-box");const rect=box.parentElement.getBoundingClientRect();const x=e.clientX-rect.left;const y=e.clientY-rect.top;if(dragging==="move"){box.style.left=(x-cropData.w/2)+"px";box.style.top=(y-cropData.h/2)+"px";}else if(dragging==="nw"){box.style.left=x+"px";box.style.top=y+"px";box.style.width=(cropData.w-(x-parseFloat(box.style.left)))+"px";box.style.height=(cropData.h-(y-parseFloat(box.style.top)))+"px";}else if(dragging==="se"){box.style.width=(x-parseFloat(box.style.left))+"px";box.style.height=(y-parseFloat(box.style.top))+"px";}});document.addEventListener("mouseup",()=>{dragging=null;});};
+const applyFilterBtn=(type)=>{if(!state.capture)return;applyFilter(type);activateFilterBtn(type);};
 const renderReview=()=>{const container=document.getElementById("review-thumbs");container.innerHTML="";(state.pages||[]).forEach((p,i)=>{const th=document.createElement("div");th.className="review-thumb"+(i===state.pageIdx?" active":"");th.innerHTML=`<img src="${p}"/><div class="review-counter">${i+1}/${state.pages.length}</div>`;th.onclick=()=>{state.pageIdx=i;renderReview();document.getElementById("review-image").src=state.pages[i];};container.appendChild(th);});document.getElementById("review-image").src=state.pages[state.pageIdx];document.getElementById("review-title").textContent=`Review (${state.pageIdx+1}/${state.pages.length})`;};
 const saveDoc=()=>{if(!state.pages?.length||!state.selectedFolder){alert("Please select a folder");return;}const folder=state.selectedFolder,now=Date.now(),date=new Date(now).toISOString().slice(0,10),name=prompt("Document name:",`Scan - ${date}`)||`Scan - ${date}`,id="doc_"+now;state.docs[id]={id,name,folder,pages:[...state.pages],created:now};if(document.getElementById("folder-remember").checked){localStorage.setItem(DEFAULT_FOLDER_PREF,folder);localStorage.setItem(REMEMBER_FOLDER_PREF,"1");}state.pages=[];state.pageIdx=0;state.capture=null;save();show("home-screen");};
 const exportPDF=async()=>{const d=state.docs[state.docNow];if(!d)return;const btn=document.getElementById("document-export");btn.disabled=true;btn.textContent="Creating...";try{const {jsPDF}=window.jspdf,pdf=new jsPDF({unit:"pt",format:"a4"});(d.pages||[]).forEach((p,i)=>{if(i)pdf.addPage();const w=pdf.internal.pageSize.getWidth(),h=pdf.internal.pageSize.getHeight();pdf.addImage(p,"JPEG",0,0,w,h);});pdf.save(d.name+".pdf");btn.textContent="Done!";setTimeout(()=>{btn.disabled=false;btn.textContent="Export PDF";},2000);}catch(e){btn.disabled=false;btn.textContent="Export PDF";alert("Failed: "+(e?.message||e));}};
@@ -761,11 +794,12 @@ document.getElementById("folder-picker-close").onclick=closeFolderPicker;
 document.getElementById("folder-picker-cancel").onclick=closeFolderPicker;
 document.getElementById("folder-picker-new").onclick=()=>{const name=prompt("New folder name:");if(name?.trim()){const id=name.toLowerCase().replace(/\s+/g,"-")+"-"+Date.now();state.folders.push({id,name,created:Date.now()});state.selectedFolder=id;save();renderFolderPickerList();}};
 document.getElementById("capture-btn").onclick=()=>{capture();stopCamera();show("preview-screen");};
-document.getElementById("preview-next").onclick=()=>{document.getElementById("filter-image").src=state.capture;applyFilter("clean");activateFilterBtn("clean");show("filter-screen");};
+document.getElementById("preview-next").onclick=()=>{document.getElementById("filter-image").src=state.capture;applyFilterBtn("clean");show("filter-screen");};
 document.getElementById("preview-back").onclick=()=>{show("camera-screen");startCamera();};
-document.querySelectorAll(".filter-btn[data-filter]").forEach(b=>{b.onclick=()=>{applyFilter(b.getAttribute("data-filter"));activateFilterBtn(b.getAttribute("data-filter"));};});
+document.querySelectorAll(".filter-btn[data-filter]").forEach(b=>{b.onclick=()=>{applyFilterBtn(b.getAttribute("data-filter"));};});
 document.getElementById("filter-back").onclick=()=>show("preview-screen");
-document.getElementById("filter-back-btn").onclick=()=>show("preview-screen");
+document.getElementById("crop-btn").onclick=()=>{isCropping=true;document.getElementById("crop-container").classList.add("active");document.getElementById("crop-btn").style.display="none";document.getElementById("confirm-crop").style.display="block";initCrop();};
+document.getElementById("confirm-crop").onclick=()=>{if(!cropData)return;const img=new Image();img.onload=()=>{const c=document.createElement("canvas");const box=document.getElementById("crop-box");const x=Math.max(0,parseFloat(box.style.left));const y=Math.max(0,parseFloat(box.style.top));const w=parseFloat(box.style.width);const h=parseFloat(box.style.height);c.width=w;c.height=h;const ctx=c.getContext("2d");const scale=img.width/document.getElementById("crop-canvas").width;ctx.drawImage(img,x*scale,y*scale,w*scale,h*scale,0,0,w,h);state.capture=c.toDataURL("image/jpeg",0.85);document.getElementById("filter-image").src=state.capture;document.getElementById("crop-container").classList.remove("active");document.getElementById("crop-btn").style.display="block";document.getElementById("confirm-crop").style.display="none";isCropping=false;};img.src=state.capture;};
 document.getElementById("filter-review").onclick=()=>{state.pages.push(state.capture);state.pageIdx=state.pages.length-1;renderReview();show("review-screen");};
 document.getElementById("review-back").onclick=()=>{state.pages.pop();show("filter-screen");};
 document.getElementById("review-delete").onclick=()=>{if(state.pages.length<2){alert("Keep at least 1 page");return;}state.pages.splice(state.pageIdx,1);if(state.pageIdx>=state.pages.length)state.pageIdx--;renderReview();};
