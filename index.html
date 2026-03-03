@@ -548,16 +548,12 @@
           <div class="onboard-text"><h3>1. Capture</h3><p>Tap blue button to scan pages</p></div>
         </div>
         <div class="onboard-step">
-          <div class="onboard-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></div>
-          <div class="onboard-text"><h3>2. Enhance</h3><p>Apply Clean, B&W, or Sharp</p></div>
-        </div>
-        <div class="onboard-step">
           <div class="onboard-icon"><svg viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></div>
-          <div class="onboard-text"><h3>3. Review</h3><p>Review and delete bad pages</p></div>
+          <div class="onboard-text"><h3>2. Review</h3><p>Review and delete bad pages</p></div>
         </div>
         <div class="onboard-step">
           <div class="onboard-icon"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
-          <div class="onboard-text"><h3>4. Save</h3><p>Choose folder and export PDF</p></div>
+          <div class="onboard-text"><h3>3. Save</h3><p>Choose folder and export PDF</p></div>
         </div>
       </div>
       <div class="onboard-footer">
@@ -634,6 +630,10 @@
       <button class="context-menu-item" id="ctx-move">
         <svg viewBox="0 0 24 24"><path d="M3 7l3-3m0 0l3 3m-3-3v10a2 2 0 002 2h8a2 2 0 002-2V7"/></svg>
         <span>Move</span>
+      </button>
+      <button class="context-menu-item" id="ctx-export">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export PDF</span>
       </button>
       <button class="context-menu-item danger" id="ctx-delete">
         <svg viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M10 7V4a1 1 0 011-1h2a1 1 0 011 1v3m6 0a1 1 0 00-1-1H8a1 1 0 00-1 1"/></svg>
@@ -731,10 +731,6 @@
         <button class="header-btn" style="visibility: hidden;"></button>
       </header>
       <main id="pages"></main>
-      <div class="footer full">
-        <button class="btn btn-danger" id="document-delete">Delete</button>
-        <button class="btn btn-primary" id="document-export">Export PDF</button>
-      </div>
     </section>
 
     <section id="settings-screen" class="screen">
@@ -779,11 +775,12 @@ const setupCropHandles=()=>{const box=document.getElementById("crop-box");let dr
 const applyFilterBtn=(type)=>{if(!state.capture)return;applyFilter(type);activateFilterBtn(type);};
 const renderReview=()=>{const container=document.getElementById("review-thumbs");container.innerHTML="";(state.pages||[]).forEach((p,i)=>{const th=document.createElement("div");th.className="review-thumb"+(i===state.pageIdx?" active":"");th.innerHTML=`<img src="${p}"/><div class="review-counter">${i+1}/${state.pages.length}</div>`;th.onclick=()=>{state.pageIdx=i;renderReview();document.getElementById("review-image").src=state.pages[i];};container.appendChild(th);});document.getElementById("review-image").src=state.pages[state.pageIdx];document.getElementById("review-title").textContent=`Review (${state.pageIdx+1}/${state.pages.length})`;};
 const saveDoc=()=>{if(!state.pages?.length||!state.selectedFolder){alert("Please select a folder");return;}const folder=state.selectedFolder,now=Date.now(),date=new Date(now).toISOString().slice(0,10),name=prompt("Document name:",`Scan - ${date}`)||`Scan - ${date}`,id="doc_"+now;state.docs[id]={id,name,folder,pages:[...state.pages],created:now};if(document.getElementById("folder-remember").checked){localStorage.setItem(DEFAULT_FOLDER_PREF,folder);localStorage.setItem(REMEMBER_FOLDER_PREF,"1");}state.pages=[];state.pageIdx=0;state.capture=null;save();show("home-screen");};
-const exportPDF=async()=>{const d=state.docs[state.docNow];if(!d)return;const btn=document.getElementById("document-export");btn.disabled=true;btn.textContent="Creating...";try{const {jsPDF}=window.jspdf,pdf=new jsPDF({unit:"pt",format:"a4"});(d.pages||[]).forEach((p,i)=>{if(i)pdf.addPage();const w=pdf.internal.pageSize.getWidth(),h=pdf.internal.pageSize.getHeight();pdf.addImage(p,"JPEG",0,0,w,h);});pdf.save(d.name+".pdf");btn.textContent="Done!";setTimeout(()=>{btn.disabled=false;btn.textContent="Export PDF";},2000);}catch(e){btn.disabled=false;btn.textContent="Export PDF";alert("Failed: "+(e?.message||e));}};
+const exportPDF=async(docId)=>{const d=state.docs[docId];if(!d)return;try{const {jsPDF}=window.jspdf,pdf=new jsPDF({unit:"pt",format:"a4"});(d.pages||[]).forEach((p,i)=>{if(i)pdf.addPage();const w=pdf.internal.pageSize.getWidth(),h=pdf.internal.pageSize.getHeight();pdf.addImage(p,"JPEG",0,0,w,h);});pdf.save(d.name+".pdf");}catch(e){alert("Failed: "+(e?.message||e));}};
 
 // Context menu actions
 document.getElementById("ctx-edit").onclick=()=>{if(!contextTarget)return;const d=state.docs[contextTarget];const newName=prompt("Rename document:",d.name);if(newName?.trim()){d.name=newName;save();renderDocs(state.currentFolder);}hideContextMenu();};
-document.getElementById("ctx-move").onclick=()=>{if(!contextTarget)return;moveTarget=contextTarget;const list=document.getElementById("move-folder-list");list.innerHTML="";state.folders.forEach(f=>{const div=document.createElement("div");div.className="modal-folder-item";div.innerHTML=`<svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>${f.name}</span>`;div.onclick=()=>{state.docs[moveTarget].folder=f.id;};list.appendChild(div);});document.getElementById("move-modal").classList.add("active");hideContextMenu();};
+document.getElementById("ctx-move").onclick=()=>{if(!contextTarget)return;moveTarget=contextTarget;const list=document.getElementById("move-folder-list");list.innerHTML="";state.folders.forEach(f=>{const div=document.createElement("div");div.className="modal-folder-item";div.innerHTML=`<svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>${f.name}</span>`;div.onclick=()=>{state.docs[moveTarget].folder=f.id;};list.appendChild(div);});document.getElementById("move-modal").classList.add("active");};
+document.getElementById("ctx-export").onclick=()=>{if(!contextTarget)return;exportPDF(contextTarget);hideContextMenu();};
 document.getElementById("ctx-delete").onclick=()=>{if(!contextTarget)return;if(confirm("Delete this document?")){delete state.docs[contextTarget];save();renderDocs(state.currentFolder);}hideContextMenu();};
 document.getElementById("move-modal-ok").onclick=()=>{save();renderDocs(state.currentFolder);document.getElementById("move-modal").classList.remove("active");};
 document.getElementById("move-modal-close").onclick=()=>document.getElementById("move-modal").classList.remove("active");
@@ -796,21 +793,19 @@ document.getElementById("folder-picker-ok").onclick=()=>{if(!state.selectedFolde
 document.getElementById("folder-picker-close").onclick=closeFolderPicker;
 document.getElementById("folder-picker-cancel").onclick=closeFolderPicker;
 document.getElementById("folder-picker-new").onclick=()=>{const name=prompt("New folder name:");if(name?.trim()){const id=name.toLowerCase().replace(/\s+/g,"-")+"-"+Date.now();state.folders.push({id,name,created:Date.now()});state.selectedFolder=id;save();renderFolderPickerList();}};
-document.getElementById("capture-btn").onclick=()=>{capture();stopCamera();show("preview-screen");};
-document.getElementById("preview-next").onclick=()=>{document.getElementById("filter-image").src=state.capture;applyFilterBtn("clean");show("filter-screen");};
+document.getElementById("capture-btn").onclick=()=>{capture();stopCamera();state.pages.push(state.capture);state.pageIdx=state.pages.length-1;renderReview();show("review-screen");};
+document.getElementById("preview-next").onclick=()=>{state.pages.push(state.capture);state.pageIdx=state.pages.length-1;renderReview();show("review-screen");};
 document.getElementById("preview-back").onclick=()=>{show("camera-screen");startCamera();};
 document.querySelectorAll(".filter-btn[data-filter]").forEach(b=>{b.onclick=()=>{applyFilterBtn(b.getAttribute("data-filter"));};});
 document.getElementById("filter-back").onclick=()=>show("preview-screen");
 document.getElementById("crop-btn").onclick=()=>{isCropping=true;document.getElementById("crop-container").classList.add("active");document.getElementById("crop-btn").style.display="none";document.getElementById("confirm-crop").style.display="block";initCrop();};
 document.getElementById("confirm-crop").onclick=()=>{if(!cropData)return;const img=new Image();img.onload=()=>{const c=document.createElement("canvas");const box=document.getElementById("crop-box");const x=Math.max(0,parseFloat(box.style.left));const y=Math.max(0,parseFloat(box.style.top));const w=parseFloat(box.style.width);const h=parseFloat(box.style.height);c.width=w;c.height=h;const ctx=c.getContext("2d");const scale=img.width/document.getElementById("crop-canvas").width;ctx.drawImage(img,x*scale,y*scale,w*scale,h*scale,0,0,w,h);state.capture=c.toDataURL("image/jpeg",0.85);document.getElementById("filter-image").src=state.capture;document.getElementById("crop-container").classList.remove("active");document.getElementById("crop-btn").style.display="block";document.getElementById("confirm-crop").style.display="none";isCropping=false;};img.src=state.capture;};
 document.getElementById("filter-review").onclick=()=>{state.pages.push(state.capture);state.pageIdx=state.pages.length-1;renderReview();show("review-screen");};
-document.getElementById("review-back").onclick=()=>{state.pages.pop();show("filter-screen");};
+document.getElementById("review-back").onclick=()=>{state.pages.pop();state.pageIdx=state.pages.length-1;renderReview();show("camera-screen");startCamera();};
 document.getElementById("review-delete").onclick=()=>{if(state.pages.length<2){alert("Keep at least 1 page");return;}state.pages.splice(state.pageIdx,1);if(state.pageIdx>=state.pages.length)state.pageIdx--;renderReview();};
 document.getElementById("review-add").onclick=()=>{show("camera-screen");startCamera();};
 document.getElementById("review-save").onclick=saveDoc;
 document.getElementById("camera-back").onclick=()=>{stopCamera();show("home-screen");};
-document.getElementById("document-export").onclick=exportPDF;
-document.getElementById("document-delete").onclick=()=>{if(!confirm("Delete this document?"))return;delete state.docs[state.docNow];save();show("home-screen");};
 document.getElementById("settings-btn").onclick=()=>show("settings-screen");
 document.getElementById("help-btn").onclick=()=>{showOnboarding(true);};
 document.getElementById("about-btn").onclick=()=>{alert("PaperClear v2.0\n\nOffline document scanner");};
