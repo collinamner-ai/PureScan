@@ -794,7 +794,7 @@
 
   <script>
 const STORAGE="purescan_v1",ONBOARD_PREF="purescan_onboard_dontshow",DEFAULT_FOLDER_PREF="purescan_default_folder",REMEMBER_FOLDER_PREF="purescan_remember_folder";
-let state={folders:[],docs:{},pages:[],capture:null,pageIdx:0,selectedFolder:null,sortBy:"recent",currentFolder:null,previewDocId:null,previewPageIdx:0},camera=null,isFirstLaunchGuide=true,contextTarget=null,moveTarget=null,isCropping=false,cropData=null;
+let state={folders:[],docs:{},pages:[],capture:null,pageIdx:0,selectedFolder:null,sortBy:"recent",currentFolder:null,previewDocId:null,previewPageIdx:0},camera=null,isFirstLaunchGuide=true,contextTarget=null,moveTarget=null,moveSelectedFolder=null,isCropping=false,cropData=null;
 
 const load=()=>{const data=localStorage.getItem(STORAGE);if(data)state=JSON.parse(data);if(!state.folders?.length)state.folders=[{id:"tax",name:"Tax",created:Date.now()},{id:"medical",name:"Medical",created:Date.now()},{id:"receipts",name:"Receipts",created:Date.now()},{id:"legal",name:"Legal",created:Date.now()},{id:"other",name:"Other",created:Date.now()}];if(!state.docs)state.docs={};};
 const save=()=>localStorage.setItem(STORAGE,JSON.stringify(state));
@@ -828,12 +828,14 @@ const openImagePreview=(docId,pageIdx)=>{const d=state.docs[docId];if(!d||!d.pag
 const updateImagePreview=()=>{const d=state.docs[state.previewDocId];if(!d)return;document.getElementById("preview-img").src=d.pages[state.previewPageIdx];document.getElementById("preview-filename").textContent=`${d.name} - Page ${state.previewPageIdx+1}/${d.pages.length}`;};
 
 document.getElementById("ctx-edit").onclick=()=>{if(!contextTarget)return;const d=state.docs[contextTarget];const newName=prompt("Rename document:",d.name);if(newName?.trim()){d.name=newName;save();renderDocs(state.currentFolder);}hideContextMenu();};
-document.getElementById("ctx-move").onclick=()=>{if(!contextTarget)return;moveTarget=contextTarget;const list=document.getElementById("move-folder-list");list.innerHTML="";state.folders.forEach(f=>{const div=document.createElement("div");div.className="modal-folder-item";div.innerHTML=`<svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>${f.name}</span>`;div.onclick=()=>{state.docs[moveTarget].folder=f.id;};list.appendChild(div);});document.getElementById("move-modal").classList.add("active");};
+const renderMoveFolderList=()=>{const list=document.getElementById("move-folder-list");list.innerHTML="";state.folders.forEach(f=>{const div=document.createElement("div");div.className="modal-folder-item"+(moveSelectedFolder===f.id?" selected":"");div.innerHTML=`<svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>${f.name}</span>`;div.onclick=()=>{moveSelectedFolder=f.id;renderMoveFolderList();};list.appendChild(div);});};
+
+document.getElementById("ctx-move").onclick=()=>{if(!contextTarget)return;moveTarget=contextTarget;const doc=state.docs[moveTarget];moveSelectedFolder=doc.folder;renderMoveFolderList();document.getElementById("move-modal").classList.add("active");};
 document.getElementById("ctx-export").onclick=()=>{if(!contextTarget)return;exportPDF(contextTarget);hideContextMenu();};
 document.getElementById("ctx-delete").onclick=()=>{if(!contextTarget)return;if(confirm("Delete this document?")){delete state.docs[contextTarget];save();renderDocs(state.currentFolder);refreshFolderCount();}hideContextMenu();};
-document.getElementById("move-modal-ok").onclick=()=>{save();renderDocs(state.currentFolder);refreshFolderCount();document.getElementById("move-modal").classList.remove("active");};
-document.getElementById("move-modal-close").onclick=()=>document.getElementById("move-modal").classList.remove("active");
-document.getElementById("move-modal-cancel").onclick=()=>document.getElementById("move-modal").classList.remove("active");
+document.getElementById("move-modal-ok").onclick=()=>{if(moveTarget&&moveSelectedFolder){state.docs[moveTarget].folder=moveSelectedFolder;save();renderDocs(state.currentFolder);refreshFolderCount();document.getElementById("move-modal").classList.remove("active");moveTarget=null;moveSelectedFolder=null;}};
+document.getElementById("move-modal-close").onclick=()=>{document.getElementById("move-modal").classList.remove("active");moveTarget=null;moveSelectedFolder=null;};
+document.getElementById("move-modal-cancel").onclick=()=>{document.getElementById("move-modal").classList.remove("active");moveTarget=null;moveSelectedFolder=null;};
 
 document.getElementById("add-folder-btn").onclick=()=>{const name=prompt("Folder name:");if(!name?.trim())return;const id=name.toLowerCase().replace(/\s+/g,"-")+"-"+Date.now();state.folders.push({id,name,created:Date.now()});save();renderFolders();};
 document.getElementById("folder-edit").onclick=()=>{const folder=state.folders.find(f=>f.id===state.currentFolder);if(!folder)return;const newName=prompt("Rename folder:",folder.name);if(newName?.trim()){folder.name=newName;save();document.getElementById("folder-title").textContent=newName;}};
