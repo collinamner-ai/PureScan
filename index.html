@@ -408,32 +408,6 @@
     .crop-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
     .crop-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
 
-    /* Crop Overlay */
-    #crop-overlay {
-      display: none;
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
-      z-index: 100;
-    }
-    .crop-box {
-      position: absolute;
-      border: 2px dashed white;
-      box-shadow: inset 0 0 0 9999px rgba(0,0,0,0.5);
-      cursor: move;
-    }
-    .crop-handle {
-      position: absolute;
-      width: 10px;
-      height: 10px;
-      background: white;
-      border: 1px solid var(--primary);
-      border-radius: 2px;
-    }
-
     #review-screen main { padding: 0; background: #000; display: flex; flex-direction: column; }
     .review-image { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
     .review-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -486,7 +460,7 @@
     #preview-screen main { padding: 0; background: #000; display: flex; align-items: center; justify-content: center; }
     #preview-canvas { width: 100%; max-height: 100%; object-fit: contain; background: #000; }
 
-    /* Folder Screen - Improved Layout */
+    /* Folder Screen */
     #folder-screen {
       flex: 1;
       flex-direction: column;
@@ -554,7 +528,6 @@
     .preview-nav button { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; }
     .preview-nav button:hover { background: var(--primary); border-color: var(--primary); }
 
-    /* Ensure folder screen is hidden by default */
     #folder-screen { display: none !important; }
     #folder-screen.active { display: flex !important; }
   </style>
@@ -811,15 +784,12 @@ const refreshFolderCount=()=>{renderFolders();};
 const openFolder=(id)=>{const folder=state.folders.find(f=>f.id===id);if(!folder)return;state.currentFolder=id;document.getElementById("folder-title").textContent=folder.name;renderDocs(id);show("folder-screen");};
 const renderDocs=(id)=>{const docs=Object.values(state.docs).filter(d=>d.folder===id).sort((a,b)=>b.created-a.created);const list=document.getElementById("folder-docs");list.innerHTML="";const grid=document.createElement("div");grid.className="docs-grid";docs.forEach(d=>{const card=document.createElement("div");card.className="doc-card";card.innerHTML=`<div class="doc-thumb"><img src="${d.pages?.[0]||''}"/></div><div class="doc-info"><div class="doc-name">${d.name}</div><div class="doc-meta">${d.pages?.length||0} page${d.pages?.length!==1?"s":""}</div></div>`;card.onclick=(e)=>{if(e.target.closest(".doc-thumb")){e.preventDefault();e.stopPropagation();openImagePreview(d.id,0);}else{openDoc(d.id);}};const thumb=card.querySelector(".doc-thumb img");thumb.onclick=(e)=>{e.preventDefault();e.stopPropagation();openImagePreview(d.id,0);};card.oncontextmenu=(e)=>{e.preventDefault();showContextMenu(e,d.id,card);};card.ontouchstart=(e)=>{card.touchStartTime=Date.now();touchStartX=e.touches[0].clientX;touchStartY=e.touches[0].clientY;};card.ontouchend=(e)=>{if(Date.now()-card.touchStartTime>500){showContextMenu(e,d.id,card);}};grid.appendChild(card);});list.appendChild(grid);};
 const openDoc=(id)=>{const d=state.docs[id];if(!d)return;state.docNow=id;document.getElementById("document-title").textContent=d.name;const grid=document.getElementById("pages");grid.innerHTML="";(d.pages||[]).forEach((p,i)=>{const thumb=document.createElement("div");thumb.style.cssText="aspect-ratio:3/4;border-radius:8px;border:1px solid #e4e8ec;overflow:hidden;background:#f8f9fb;cursor:pointer;";thumb.innerHTML=`<img src="${p}" style="width:100%;height:100%;object-fit:cover;"/>`;thumb.onclick=()=>openImagePreview(id,i);grid.appendChild(thumb);});show("document-screen");};
-const showContextMenu=(e,docId,cardElement)=>{contextTarget=docId;const menu=document.getElementById("context-menu");menu.classList.add("active");const rect=cardElement.getBoundingClientRect();const menuHeight=160;const top=rect.bottom+8;const left=rect.left+rect.width/2-80;menu.style.top=top+"px";menu.style.left=Math.max(8,Math.min(window.innerWidth-168,left))+"px";};
+const showContextMenu=(e,docId,cardElement)=>{contextTarget=docId;const menu=document.getElementById("context-menu");menu.classList.add("active");const rect=cardElement.getBoundingClientRect();const top=rect.bottom+8;const left=rect.left+rect.width/2-80;menu.style.top=top+"px";menu.style.left=Math.max(8,Math.min(window.innerWidth-168,left))+"px";};
 const hideContextMenu=()=>{document.getElementById("context-menu").classList.remove("active");contextTarget=null;};
-const startCamera=async()=>{try{document.getElementById("camera-loading").style.display="block";camera=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});document.getElementById("camera-feed").srcObject=camera;document.getElementById("camera-loading").style.display="none";const video=document.getElementById("camera-feed");video.addEventListener("touchend",(e)=>{const rect=video.getBoundingClientRect();const x=e.changedTouches[0].clientX-rect.left;const y=e.changedTouches[0].clientY-rect.top;const xPercent=(x/rect.width)*100;const yPercent=(y/rect.height)*100;showFocusIndicator(xPercent,yPercent);try{const constraints={video:{advanced:[{focusMode:"continuous",focusDistance:0}]}};navigator.mediaDevices.getUserMedia(constraints).then(stream=>{camera.getTracks().forEach(t=>t.stop());camera=stream;video.srcObject=stream;});}catch(e){}},{passive:true});}catch(e){document.getElementById("camera-loading").style.display="none";alert("Camera error: "+(e?.name||"Unknown"));show("home-screen");}};
+const startCamera=async()=>{try{document.getElementById("camera-loading").style.display="block";camera=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});document.getElementById("camera-feed").srcObject=camera;document.getElementById("camera-loading").style.display="none";const video=document.getElementById("camera-feed");video.addEventListener("touchend",(e)=>{const rect=video.getBoundingClientRect();const x=e.changedTouches[0].clientX-rect.left;const y=e.changedTouches[0].clientY-rect.top;const xPercent=(x/rect.width)*100;const yPercent=(y/rect.height)*100;showFocusIndicator(xPercent,yPercent);},{passive:true});}catch(e){document.getElementById("camera-loading").style.display="none";alert("Camera error: "+(e?.name||"Unknown"));show("home-screen");}};
 const showFocusIndicator=(x,y)=>{let indicator=document.getElementById("focus-indicator");if(!indicator){indicator=document.createElement("div");indicator.id="focus-indicator";indicator.style.cssText="position:fixed;width:60px;height:60px;border:2px solid #0066ff;border-radius:50%;pointer-events:none;z-index:40;opacity:0;transition:opacity 0.3s;";document.body.appendChild(indicator);}const video=document.getElementById("camera-feed");const rect=video.getBoundingClientRect();indicator.style.left=(rect.left+rect.width*x/100-30)+"px";indicator.style.top=(rect.top+rect.height*y/100-30)+"px";indicator.style.opacity="1";setTimeout(()=>{indicator.style.opacity="0";},600);};
 const stopCamera=()=>{if(camera){camera.getTracks().forEach(t=>t.stop());camera=null;}};
-const autoEnhanceCapture=()=>{if(!state.capture)return;const img=new Image();img.onload=()=>{const c=document.createElement("canvas");c.width=img.width;c.height=img.height;const ctx=c.getContext("2d");ctx.drawImage(img,0,0);let pixels=ctx.getImageData(0,0,c.width,c.height);let data=pixels.data;const grayscale=new Uint8ClampedArray(data.length);for(let i=0;i<data.length;i+=4){const gray=Math.round(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114);grayscale[i]=grayscale[i+1]=grayscale[i+2]=gray;grayscale[i+3]=255;}const w=c.width,h=c.height;const denoised=morphologicalDenoise(grayscale,w,h);const shadowRemoved=removeShadows(denoised,w,h);const thresholded=adaptiveThreshold(shadowRemoved,w,h);for(let i=0;i<data.length;i+=4){data[i]=data[i+1]=data[i+2]=thresholded[i];data[i+3]=255;}ctx.putImageData(pixels,0,0);state.capture=c.toDataURL("image/jpeg",0.85);};img.src=state.capture;};
-const morphologicalDenoise=(data,w,h)=>{const result=new Uint8ClampedArray(data);const kernel=3;const half=Math.floor(kernel/2);for(let y=half;y<h-half;y++){for(let x=half;x<w-half;x++){let min=255,max=0;for(let ky=-half;ky<=half;ky++){for(let kx=-half;kx<=half;kx++){const idx=(y+ky)*w+(x+kx);min=Math.min(min,data[idx*4]);max=Math.max(max,data[idx*4]);}}}return result;};
-const removeShadows=(data,w,h)=>{const result=new Uint8ClampedArray(data);const blockSize=20;for(let y=0;y<h;y+=blockSize){for(let x=0;x<w;x+=blockSize){let sum=0,count=0;const maxY=Math.min(y+blockSize,h),maxX=Math.min(x+blockSize,w);for(let py=y;py<maxY;py++){for(let px=x;px<maxX;px++){sum+=data[py*w+px];count++;}}const avg=Math.round(sum/count);const strength=0.7;for(let py=y;py<maxY;py++){for(let px=x;px<maxX;px++){const idx=py*w+px;const normalized=Math.round(data[idx]*strength+avg*(1-strength));result[idx]=Math.min(255,normalized);}}}}return result;};
-const adaptiveThreshold=(data,w,h)=>{const result=new Uint8ClampedArray(data);const windowSize=15;const half=Math.floor(windowSize/2);const C=10;for(let y=half;y<h-half;y++){for(let x=half;x<w-half;x++){let sum=0;for(let ky=-half;ky<=half;ky++){for(let kx=-half;kx<=half;kx++){sum+=data[(y+ky)*w+(x+kx)];}}const mean=Math.round(sum/(windowSize*windowSize));const idx=y*w+x;result[idx]=data[idx]>mean-C?255:0;}}return result;};
+const autoEnhanceCapture=()=>{if(!state.capture)return;const img=new Image();img.onload=()=>{const c=document.createElement("canvas");c.width=img.width;c.height=img.height;const ctx=c.getContext("2d");ctx.drawImage(img,0,0);const pixels=ctx.getImageData(0,0,c.width,c.height);const data=pixels.data;for(let i=0;i<data.length;i+=4){const gray=(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114);const enhanced=Math.max(0,Math.min(255,gray<128?(gray*0.5):(100+(gray-128)*1.8)));data[i]=data[i+1]=data[i+2]=enhanced;}ctx.putImageData(pixels,0,0);state.capture=c.toDataURL("image/jpeg",0.85);};img.src=state.capture;};
 const capture=()=>{const video=document.getElementById("camera-feed"),canvas=document.getElementById("preview-canvas");canvas.width=video.videoWidth;canvas.height=video.videoHeight;canvas.getContext("2d").drawImage(video,0,0);state.capture=canvas.toDataURL("image/jpeg",0.85);autoEnhanceCapture();};
 const applyFilter=(type)=>{if(!state.capture)return;const img=new Image();img.onload=()=>{const c=document.createElement("canvas");c.width=img.width;c.height=img.height;const ctx=c.getContext("2d");ctx.drawImage(img,0,0);if(type==="clean"){/* Keep original */}else if(type==="bw"){const pixels=ctx.getImageData(0,0,c.width,c.height),data=pixels.data;for(let i=0;i<data.length;i+=4){const gray=(data[i]*0.299+data[i+1]*0.587+data[i+2]*0.114);const threshold=128;const bw=gray>threshold?255:0;data[i]=data[i+1]=data[i+2]=bw;}ctx.putImageData(pixels,0,0);}else if(type==="contrast"){const pixels=ctx.getImageData(0,0,c.width,c.height),data=pixels.data;for(let i=0;i<data.length;i+=4){const gray=(data[i]+data[i+1]+data[i+2])/3;const sharpen=Math.max(0,Math.min(255,gray<128?(gray*0.7):(128+(gray-128)*1.8)));data[i]=data[i+1]=data[i+2]=sharpen;}ctx.putImageData(pixels,0,0);}state.capture=c.toDataURL("image/jpeg",0.85);document.getElementById("filter-image").src=state.capture;};img.src=state.capture;};
 const activateFilterBtn=(type)=>{document.querySelectorAll(".filter-btn[data-filter]").forEach(b=>b.classList.remove("active"));document.querySelector(`.filter-btn[data-filter="${type}"]`)?.classList.add("active");};
@@ -830,13 +800,9 @@ const renderReview=()=>{const container=document.getElementById("review-thumbs")
 const setupReviewSwipe=()=>{const container=document.getElementById("review-image-container");let startX=0;container.addEventListener("touchstart",(e)=>{startX=e.touches[0].clientX;},(false));container.addEventListener("touchend",(e)=>{const endX=e.changedTouches[0].clientX;const diff=startX-endX;if(Math.abs(diff)>50){if(diff>0&&state.pageIdx<state.pages.length-1){state.pageIdx++;renderReview();}else if(diff<0&&state.pageIdx>0){state.pageIdx--;renderReview();}}},{passive:true});};
 const saveDoc=()=>{if(!state.pages?.length||!state.selectedFolder){alert("Please select a folder");return;}const folder=state.selectedFolder,now=Date.now(),date=new Date(now).toISOString().slice(0,10),name=prompt("Document name:",`Scan - ${date}`)||`Scan - ${date}`,id="doc_"+now;state.docs[id]={id,name,folder,pages:[...state.pages],created:now};if(document.getElementById("folder-remember").checked){localStorage.setItem(DEFAULT_FOLDER_PREF,folder);localStorage.setItem(REMEMBER_FOLDER_PREF,"1");}state.pages=[];state.pageIdx=0;state.capture=null;save();refreshFolderCount();openFolder(folder);};
 const exportPDF=async(docId)=>{const d=state.docs[docId];if(!d)return;try{const {jsPDF}=window.jspdf,pdf=new jsPDF({unit:"pt",format:"a4"});(d.pages||[]).forEach((p,i)=>{if(i)pdf.addPage();const w=pdf.internal.pageSize.getWidth(),h=pdf.internal.pageSize.getHeight();pdf.addImage(p,"JPEG",0,0,w,h);});pdf.save(d.name+".pdf");}catch(e){alert("Failed: "+(e?.message||e));}};
-
 const importImagesFromGallery=()=>{document.getElementById("import-file-input").click();};
-
-const handleImportedFiles=(files)=>{if(!files||files.length===0)return;const imported=[];let loaded=0;Array.from(files).forEach((file,idx)=>{const reader=new FileReader();reader.onload=(e)=>{imported.push(e.target.result);loaded++;if(loaded===files.length){state.pages=imported;state.pageIdx=0;renderReview();show("review-screen");}};reader.readAsDataURL(file);});};
-
+const handleImportedFiles=(files)=>{if(!files||files.length===0)return;const imported=[];let loaded=0;Array.from(files).forEach((file)=>{const reader=new FileReader();reader.onload=(e)=>{imported.push(e.target.result);loaded++;if(loaded===files.length){state.pages=imported;state.pageIdx=0;renderReview();show("review-screen");}};reader.readAsDataURL(file);});};
 const openImagePreview=(docId,pageIdx)=>{const d=state.docs[docId];if(!d||!d.pages)return;state.previewDocId=docId;state.previewPageIdx=pageIdx;updateImagePreview();document.getElementById("image-preview-modal").classList.add("active");};
-
 const updateImagePreview=()=>{const d=state.docs[state.previewDocId];if(!d)return;document.getElementById("preview-img").src=d.pages[state.previewPageIdx];document.getElementById("preview-filename").textContent=`${d.name} - Page ${state.previewPageIdx+1}/${d.pages.length}`;};
 
 document.getElementById("ctx-edit").onclick=()=>{if(!contextTarget)return;const d=state.docs[contextTarget];const newName=prompt("Rename document:",d.name);if(newName?.trim()){d.name=newName;save();renderDocs(state.currentFolder);}hideContextMenu();};
